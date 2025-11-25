@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { IconSymbol } from '@/components/IconSymbol';
 import { colors } from '@/styles/commonStyles';
 import * as Haptics from 'expo-haptics';
@@ -16,50 +17,111 @@ interface Upgrade {
   type: 'click' | 'passive';
 }
 
+interface GameState {
+  fartCount: number;
+  fartsPerClick: number;
+  fartsPerSecond: number;
+  totalFartsEarned: number;
+  upgrades: Upgrade[];
+}
+
+const STORAGE_KEY = '@fart_clicker_game_state';
+
+const initialUpgrades: Upgrade[] = [
+  {
+    id: 'click1',
+    name: 'Better Beans',
+    description: '+1 fart per click',
+    cost: 10,
+    level: 0,
+    effect: 1,
+    type: 'click',
+  },
+  {
+    id: 'click2',
+    name: 'Spicy Burrito',
+    description: '+5 farts per click',
+    cost: 100,
+    level: 0,
+    effect: 5,
+    type: 'click',
+  },
+  {
+    id: 'passive1',
+    name: 'Auto Farter',
+    description: '+1 fart per second',
+    cost: 50,
+    level: 0,
+    effect: 1,
+    type: 'passive',
+  },
+  {
+    id: 'passive2',
+    name: 'Fart Factory',
+    description: '+5 farts per second',
+    cost: 500,
+    level: 0,
+    effect: 5,
+    type: 'passive',
+  },
+];
+
 export default function FartClickerScreen() {
   const [fartCount, setFartCount] = useState(0);
   const [fartsPerClick, setFartsPerClick] = useState(1);
   const [fartsPerSecond, setFartsPerSecond] = useState(0);
   const [totalFartsEarned, setTotalFartsEarned] = useState(0);
+  const [upgrades, setUpgrades] = useState<Upgrade[]>(initialUpgrades);
+  const [isLoaded, setIsLoaded] = useState(false);
 
-  const [upgrades, setUpgrades] = useState<Upgrade[]>([
-    {
-      id: 'click1',
-      name: 'Better Beans',
-      description: '+1 fart per click',
-      cost: 10,
-      level: 0,
-      effect: 1,
-      type: 'click',
-    },
-    {
-      id: 'click2',
-      name: 'Spicy Burrito',
-      description: '+5 farts per click',
-      cost: 100,
-      level: 0,
-      effect: 5,
-      type: 'click',
-    },
-    {
-      id: 'passive1',
-      name: 'Auto Farter',
-      description: '+1 fart per second',
-      cost: 50,
-      level: 0,
-      effect: 1,
-      type: 'passive',
-    },
-    {
-      id: 'passive2',
-      name: 'Fart Factory',
-      description: '+5 farts per second',
-      cost: 500,
-      level: 0,
-      effect: 5,
-      type: 'passive',
-    },
-  ]);
+  // Load game state from AsyncStorage on mount
+  useEffect(() => {
+    loadGameState();
+  }, []);
+
+  // Save game state to AsyncStorage whenever it changes
+  useEffect(() => {
+    if (isLoaded) {
+      saveGameState();
+    }
+  }, [fartCount, fartsPerClick, fartsPerSecond, totalFartsEarned, upgrades, isLoaded]);
+
+  const loadGameState = async () => {
+    try {
+      const savedState = await AsyncStorage.getItem(STORAGE_KEY);
+      if (savedState !== null) {
+        const gameState: GameState = JSON.parse(savedState);
+        console.log('Loading saved game state:', gameState);
+        setFartCount(gameState.fartCount);
+        setFartsPerClick(gameState.fartsPerClick);
+        setFartsPerSecond(gameState.fartsPerSecond);
+        setTotalFartsEarned(gameState.totalFartsEarned);
+        setUpgrades(gameState.upgrades);
+      } else {
+        console.log('No saved game state found, starting fresh');
+      }
+    } catch (error) {
+      console.error('Error loading game state:', error);
+    } finally {
+      setIsLoaded(true);
+    }
+  };
+
+  const saveGameState = async () => {
+    try {
+      const gameState: GameState = {
+        fartCount,
+        fartsPerClick,
+        fartsPerSecond,
+        totalFartsEarned,
+        upgrades,
+      };
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(gameState));
+      console.log('Game state saved');
+    } catch (error) {
+      console.error('Error saving game state:', error);
+    }
+  };
 
   // Passive fart generation
   useEffect(() => {
@@ -125,6 +187,17 @@ export default function FartClickerScreen() {
     }
     return num.toString();
   };
+
+  // Don't render until state is loaded
+  if (!isLoaded) {
+    return (
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -238,6 +311,15 @@ const styles = StyleSheet.create({
   },
   contentContainerWithTabBar: {
     paddingBottom: 100,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 18,
+    color: colors.text,
   },
   header: {
     alignItems: 'center',
